@@ -9,6 +9,7 @@ import { Model } from 'mongoose';
 import { CloudinaryService } from 'src/cloudinary/cloudinary.service';
 import { BaseQuery, SearchQuery } from 'src/common/interface';
 import { Product } from 'src/schemas/Product';
+import { EditProductDto } from './dtos/edit-product.dto';
 
 const PAGE_SIZE = 10;
 
@@ -31,10 +32,24 @@ export class ProductsService {
       throw new BadRequestException('Error uploading product image');
     }
     const product = await this.productModel.create({
-      ...createProductDto,
+      name: createProductDto.name,
+      price: +createProductDto.price,
+      stock: +createProductDto.stock,
+      category: createProductDto.category,
       photo: result.secure_url,
     });
     return product;
+  }
+
+  async fetchAdminProducts(page: number) {
+    const skip = (page - 1) * 10;
+
+    return this.productModel
+      .find()
+      .sort({ createdAt: -1 })
+      .limit(PAGE_SIZE)
+      .skip(skip)
+      .exec();
   }
 
   async fetchProducts(searchQuery: SearchQuery) {
@@ -66,7 +81,7 @@ export class ProductsService {
       .skip(skip)
       .sort(
         searchQuery.sort
-          ? { price: searchQuery.sort === 'asc' ? 1 : -1 }
+          ? { price: searchQuery.sort === 'asc' ? 1 : -1, createdAt: -1 }
           : { createdAt: -1 },
       )
       .exec();
@@ -92,7 +107,7 @@ export class ProductsService {
   }
 
   async getSingleProduct(productId: string) {
-    const product = await this.productModel.findById(productId);
+    const product = await this.productModel.findById(productId).exec();
     if (!product) {
       throw new NotFoundException(`Product with id ${productId} not found`);
     }
@@ -103,5 +118,23 @@ export class ProductsService {
     await this.getSingleProduct(productId);
     await this.productModel.deleteOne({ _id: productId });
     return { message: 'Product deleted successfully' };
+  }
+
+  async editProduct(productId: string, editProductDto: EditProductDto) {
+    const product = await this.getSingleProduct(productId);
+    await this.productModel
+      .findByIdAndUpdate(productId, {
+        $set: {
+          name: editProductDto.name ? editProductDto.name : product.name,
+          price: editProductDto.price ? editProductDto.price : product.price,
+          stock: editProductDto.stock ? editProductDto.stock : product.stock,
+          category: editProductDto.category
+            ? editProductDto.category
+            : product.category,
+          photo: product.photo,
+        },
+      })
+      .exec();
+    return { message: 'Product edited successfully' };
   }
 }
